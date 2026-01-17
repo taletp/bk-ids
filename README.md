@@ -1,0 +1,377 @@
+# IDS/IPS System - Hệ thống Phát hiện và Ngăn chặn Xâm nhập
+
+Hệ thống **Phát hiện và Ngăn chặn Xâm nhập (IDS/IPS)** sử dụng **Deep Learning** để phát hiện 4 loại tấn công DoS/DDoS:
+
+1. **Teardrop Attack** - Lỗi phân mảnh IP
+2. **Ping of Death** - Gói ICMP quá khổ
+3. **TCP SYN Flood** - Làm tràn bảng kết nối TCP
+4. **DNS Amplification** - Khuếch đại lưu lượng DNS UDP
+
+---
+
+## 📁 Cấu trúc Project
+
+```
+btl6/
+├── src/                    # Mã nguồn chính
+│   ├── __init__.py
+│   ├── sniffer.py         # Module bắt gói tin
+│   ├── preprocessor.py    # Feature extraction & scaling
+│   ├── model_trainer.py   # Deep Learning models (CNN/LSTM/MLP)
+│   ├── detector.py        # Detection engine
+│   ├── prevention.py      # Firewall & blocking
+│   └── dashboard.py       # Streamlit dashboard
+├── config/                # Cấu hình
+│   └── config.py
+├── models/                # Lưu mô hình & scaler
+├── logs/                  # Log files
+├── data/                  # Training data
+├── main.py               # Main application
+├── train.py              # Training script
+├── requirements.txt      # Dependencies
+└── README.md            # Tài liệu này
+```
+
+---
+
+## 🚀 Quick Start
+
+### 1. Cài đặt Dependencies
+
+```bash
+cd btl6
+pip install -r requirements.txt
+```
+
+### 2. Huấn luyện Mô hình (Optional)
+
+```bash
+# Train MLP model
+python train.py --architecture mlp --epochs 50
+
+# Train all architectures
+python train.py --all --epochs 50
+```
+
+### 3. Chạy Hệ thống
+
+#### Mode Mock (Testing trên Windows)
+```bash
+python main.py --mode mock --auto-block --threshold 0.85
+```
+
+#### Mode Live (Linux với interface thực)
+```bash
+python main.py --mode live --interface eth0 --auto-block --threshold 0.85
+```
+
+#### Với Dashboard Streamlit
+```bash
+python main.py --mode mock --dashboard
+```
+
+---
+
+## 🛠️ Modules
+
+### 1. **Sniffer** (`sniffer.py`)
+Bắt gói tin từ interface mạng sử dụng Scapy.
+
+**Tính năng:**
+- Bắt gói tin theo thời gian thực
+- Lọc theo giao thức (ICMP, TCP, UDP)
+- Mock mode cho testing
+
+**Ví dụ:**
+```python
+from src.sniffer import PacketSniffer
+
+sniffer = PacketSniffer(interface='eth0', packet_filter='tcp')
+sniffer.start_sniffing(callback=process_packet)
+```
+
+### 2. **Preprocessor** (`preprocessor.py`)
+Trích xuất features và chuẩn hóa dữ liệu.
+
+**Features (17 features):**
+- IP layer: src_ip, dst_ip, total_length, fragment_offset, ttl
+- TCP layer: src_port, dst_port, flags (SYN/ACK/FIN/RST)
+- UDP layer: payload_size
+- Computed: packet_rate
+
+**Ví dụ:**
+```python
+from src.preprocessor import DataPreprocessor
+
+preprocessor = DataPreprocessor(scaler_path='models/scaler.joblib')
+processed = preprocessor.preprocess_packet(packet_info)
+```
+
+### 3. **Model Trainer** (`model_trainer.py`)
+Tạo và huấn luyện các mô hình Deep Learning.
+
+**Architectures:**
+- **MLP**: Multilayer Perceptron (phổ biến, nhanh)
+- **CNN**: Convolutional Neural Network (tốt cho pattern detection)
+- **LSTM**: Long Short-Term Memory (tốt cho sequences)
+
+**Ví dụ:**
+```python
+from src.model_trainer import AttackDetectionModel
+
+model = AttackDetectionModel(input_dim=17, architecture='mlp')
+history = model.train(X_train, y_train, epochs=50)
+model.save('models/ids_model_mlp.keras')
+```
+
+### 4. **Detector** (`detector.py`)
+Load mô hình và thực hiện phát hiện tấn công real-time.
+
+**Classes:**
+- 0: Normal
+- 1: Teardrop
+- 2: PingOfDeath
+- 3: SynFlood
+- 4: DNS_Amp
+
+**Ví dụ:**
+```python
+from src.detector import DetectionEngine
+
+detector = DetectionEngine(
+    model_path='models/ids_model_mlp.keras',
+    scaler_path='models/scaler.joblib',
+    confidence_threshold=0.85
+)
+
+result = detector.detect(packet_info)
+# Returns: {is_attack, attack_type, confidence, all_predictions}
+```
+
+### 5. **Prevention** (`prevention.py`)
+Quản lý Firewall để chặn IPs tấn công.
+
+**Hỗ trợ:**
+- Linux: iptables
+- Windows: netsh firewall
+
+**Ví dụ:**
+```python
+from src.prevention import FirewallManager
+
+firewall = FirewallManager(auto_block=True, block_duration=3600)
+firewall.block_ip('192.168.1.100', reason='SYN Flood detected')
+```
+
+### 6. **Dashboard** (`dashboard.py`)
+Giao diện Streamlit Dark Mode theo tiêu chuẩn SOC.
+
+**Widgets:**
+- 🟢/🔴 Status Indicator
+- 📈 Live Traffic Graph (Normal vs Attack)
+- 🎯 Attack Distribution (Donut chart)
+- 🚨 Live Alerts Log
+- ⚙️ Configuration Controls
+
+---
+
+## 📊 Configuration (`config/config.py`)
+
+```python
+# Sniffer
+SNIFFER_CONFIG = {
+    'interface': 'eth0',          # Interface name
+    'packet_filter': None,        # BPF filter
+    'use_mock': False,            # Testing mode
+}
+
+# Model
+MODEL_CONFIG = {
+    'architecture': 'mlp',        # mlp, cnn, lstm
+    'epochs': 50,
+    'batch_size': 32,
+}
+
+# Detection
+DETECTOR_CONFIG = {
+    'confidence_threshold': 0.85, # Alert threshold (0-1)
+}
+
+# Prevention
+PREVENTION_CONFIG = {
+    'auto_block': True,           # Auto-block attacks
+    'block_duration': 3600,       # 1 hour
+}
+```
+
+---
+
+## 🔧 Command Line Options
+
+```bash
+python main.py [OPTIONS]
+
+Options:
+  --mode {live, demo, mock}     Operation mode (default: mock)
+  --interface INTERFACE         Network interface (default: eth0)
+  --auto-block                  Enable automatic IP blocking
+  --threshold THRESHOLD         Confidence threshold (default: 0.85)
+  --dashboard                   Launch Streamlit dashboard
+```
+
+---
+
+## 📈 Demo Features
+
+### Synthetic Data Generation
+Script `train.py` sinh dữ liệu training giả lập theo loại tấn công:
+
+```python
+# Generate 2000 samples (400 per class)
+X, y = generate_synthetic_data(n_samples=2000)
+```
+
+### Mock Components
+Cho testing mà không cần:
+- Root/Admin privileges
+- Thực tế network interface
+- TensorFlow/CUDA
+
+---
+
+## 🎯 Attack Detection Pipeline
+
+```
+[Network Packet] 
+    ↓
+[Sniffer] - Bắt gói tin từ interface
+    ↓
+[Preprocessor] - Extract 17 features + Scale
+    ↓
+[Deep Learning Model] - MLP/CNN/LSTM
+    ↓
+[Detector] - Phân loại (Normal/4 Attack types)
+    ↓
+[Prevention] - Auto-block IP nếu attack
+    ↓
+[Dashboard] - Real-time visualization
+```
+
+---
+
+## 📋 Feature List
+
+### Functional Requirements ✓
+
+- ✓ FR-01: Real-time packet capture
+- ✓ FR-02: Protocol filtering (ICMP, TCP, UDP)
+- ✓ FR-03: Feature extraction (17 features)
+- ✓ FR-04: Data scaling (StandardScaler)
+- ✓ FR-05: Load Deep Learning model
+- ✓ FR-06: Attack classification (5 classes)
+- ✓ FR-07: Configurable confidence threshold
+- ✓ FR-08: Firewall integration (iptables/netsh)
+- ✓ FR-10: Real-time traffic metrics
+- ✓ FR-11: Attack alerts
+- ✓ FR-12: Auto-block toggle
+
+### Non-Functional Requirements ✓
+
+- ✓ Performance: <1s detection latency
+- ✓ Compatibility: Linux + Windows (with fallback)
+- ✓ Data Integrity: Same scaler for inference as training
+
+---
+
+## 🧪 Testing
+
+### Unit Test Example
+```python
+# Test sniffer
+from src.sniffer import MockPacketSniffer
+sniffer = MockPacketSniffer(use_mock=True)
+
+# Test detector
+from src.detector import MockDetectionEngine
+detector = MockDetectionEngine()
+result = detector.detect({'src_ip': '192.168.1.1', ...})
+
+# Test firewall
+from src.prevention import MockFirewallManager
+fw = MockFirewallManager(auto_block=True)
+fw.block_ip('192.168.1.100')
+```
+
+---
+
+## 📚 Dependencies
+
+```
+scapy>=2.5.0              # Packet sniffing
+tensorflow>=2.12.0        # Deep Learning
+scikit-learn>=1.3.0       # ML utilities
+numpy>=1.23.0             # Numerical computing
+pandas>=1.5.0             # Data manipulation
+streamlit>=1.28.0         # Dashboard
+plotly>=5.14.0            # Interactive charts
+joblib>=1.3.0             # Model serialization
+```
+
+---
+
+## 🚨 Important Notes
+
+### Linux Setup
+```bash
+# Install dependencies
+sudo apt-get install python3-pip python3-dev
+
+# Run with sudo for real packet capture
+sudo python main.py --mode live --interface eth0
+```
+
+### Windows Testing
+```bash
+# Use mock mode (no real interface needed)
+python main.py --mode mock --dashboard
+```
+
+### Model Files
+- Model sẽ được lưu tại: `models/ids_model_<arch>.keras`
+- Scaler sẽ được lưu tại: `models/scaler.joblib`
+- Đảm bảo sử dụng scaler giống như khi training!
+
+---
+
+## 📞 Troubleshooting
+
+| Lỗi | Giải pháp |
+|-----|----------|
+| `Permission denied` on Linux | Chạy với `sudo` |
+| `No module named 'tensorflow'` | `pip install tensorflow` |
+| `Interface not found` | Check interface name: `ip link show` (Linux) |
+| `Model not found` | Chạy `train.py` trước |
+
+---
+
+## 🎓 Educational Resources
+
+- **Scapy**: https://scapy.readthedocs.io/
+- **TensorFlow**: https://www.tensorflow.org/
+- **Streamlit**: https://docs.streamlit.io/
+- **Network Security**: https://owasp.org/
+
+---
+
+## 📝 License
+
+Educational Project - BKHN
+
+---
+
+## 👨‍💻 Author
+
+IDS/IPS Development Team
+
+**Version**: 1.0  
+**Last Updated**: 2024
