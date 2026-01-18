@@ -26,12 +26,26 @@ import config
 # Import modules
 from src.sniffer import PacketSniffer, MockPacketSniffer, get_sniffer
 from src.preprocessor import DataPreprocessor
-from src.detector import DetectionEngine, MockDetectionEngine
+from src.detector import DetectionEngine, MockDetectionEngine, NoopDetectionEngine
 from src.prevention import FirewallManager, MockFirewallManager
+from src.console_logger import setup_colored_logger
+
+try:
+    from src.dashboard_dash import dashboard_state as dash_state, start_dashboard_thread
+    DASH_AVAILABLE = True
+except ImportError:
+    DASH_AVAILABLE = False
+    logger.warning("Dash dashboard not available. Install: pip install dash dash-bootstrap-components")
 
 # Setup logging
 logging.config.dictConfig(config.LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
+# Improve console output with colors
+try:
+    setup_colored_logger()
+except Exception:
+    # Fallback: continue without colored console
+    pass
 
 
 class IDSIPSSystem:
@@ -49,6 +63,7 @@ class IDSIPSSystem:
         """
         self.use_mock = use_mock or config.DEMO_MODE
         self.is_running = False
+        self.dashboard_thread = None
         
         # Statistics
         self.stats = {
@@ -103,17 +118,33 @@ class IDSIPSSystem:
             else:
                 # Try to load real model, fall back to mock if not available
                 try:
+                    # Check for metadata file
+                    model_dir = Path(config.MODEL_DIR)
+                    metadata_path = model_dir / 'model_metadata.json'
+                    
                     self.detector = DetectionEngine(
                         model_path=config.DETECTOR_CONFIG['model_path'],
                         scaler_path=config.DETECTOR_CONFIG['scaler_path'],
                         confidence_threshold=config.DETECTOR_CONFIG['confidence_threshold'],
-                        architecture=config.DETECTOR_CONFIG['architecture']
+                        architecture=config.DETECTOR_CONFIG['architecture'],
+                        metadata_path=str(metadata_path) if metadata_path.exists() else None,
+                        whitelist=config.DETECTOR_CONFIG.get('whitelist', []),
+                        whitelist_subnets=config.DETECTOR_CONFIG.get('whitelist_subnets', [])
                     )
                 except Exception as e:
-                    logger.warning(f"Could not load model, using mock detector: {str(e)}")
-                    self.detector = MockDetectionEngine(
-                        confidence_threshold=config.DETECTOR_CONFIG['confidence_threshold']
-                    )
+                    logger.warning(f"Could not load model: {str(e)}")
+                    # In LIVE mode prefer a safe noop detector (always Normal) to
+                    # avoid noisy randomized alerts from the MockDetectionEngine.
+                    if not config.DEMO_MODE:
+                        logger.info("Falling back to NoopDetectionEngine (live safe mode)")
+                        self.detector = NoopDetectionEngine(
+                            confidence_threshold=config.DETECTOR_CONFIG['confidence_threshold']
+                        )
+                    else:
+                        logger.info("Falling back to MockDetectionEngine (demo/mock mode)")
+                        self.detector = MockDetectionEngine(
+                            confidence_threshold=config.DETECTOR_CONFIG['confidence_threshold']
+                        )
             
             # Initialize firewall manager
             logger.info("Initializing firewall manager...")
@@ -147,11 +178,7 @@ class IDSIPSSystem:
             if detection_result.get('is_attack'):
                 self.stats['attacks_detected'] += 1
                 
-                logger.warning(
-                    f"ATTACK DETECTED: {detection_result['attack_type']} from "
-                    f"{detection_result['src_ip']} -> {detection_result['dst_ip']} "
-                    f"(Confidence: {detection_result['confidence']:.2%})"
-                )
+                # Attack logging is now handled in detector.py
                 
                 # Try to block IP
                 if self.firewall and self.firewall.auto_block:
@@ -165,6 +192,19 @@ class IDSIPSSystem:
             # Store detection result
             self.detection_results['all'].append(detection_result)
             self.detection_results[detection_result['attack_type']].append(detection_result)
+            
+            # Update dashboard if available
+            if DASH_AVAILABLE:
+                try:
+                    dash_state.add_packet(packet_info, detection_result)
+                    if detection_result.get('is_attack') and self.firewall:
+                        dash_state.add_blocked_ip(detection_result['src_ip'])
+                except Exception as e:
+                    logger.debug(f"Error updating dashboard: {e}")
+            
+            # Log periodic metrics summary (every 1000 packets)
+            if self.stats['packets_processed'] % 1000 == 0:
+                self.detector.log_metrics_summary()
             
         except Exception as e:
             logger.error(f"Error during detection: {str(e)}")
@@ -217,8 +257,12 @@ class IDSIPSSystem:
         logger.info(f"Total Attacks Detected: {self.stats['attacks_detected']:,}")
         logger.info(f"Total Attacks Blocked: {self.stats['attacks_blocked']:,}")
         
+        # Show detector metrics
+        logger.info("")
+        self.detector.log_metrics_summary()
+        
         if self.stats['attacks_detected'] > 0:
-            logger.info("\nAttack Distribution:")
+            logger.info("\nAttack Distribution (from stored results):")
             for attack_type, count in sorted(
                 self.detection_results.items(), 
                 key=lambda x: len(x[1]), 
@@ -255,6 +299,23 @@ class IDSIPSSystem:
         if self.firewall:
             self.firewall.auto_block = enable
             logger.info(f"Auto-block {'enabled' if enable else 'disabled'}")
+    
+    def start_dashboard(self, host: str = None, port: int = None):
+        """Start the Dash dashboard in a separate thread"""
+        if not DASH_AVAILABLE:
+            logger.error("Dash not available. Install: pip install dash dash-bootstrap-components psutil")
+            return False
+        
+        host = host or config.DASHBOARD_CONFIG['host']
+        port = port or config.DASHBOARD_CONFIG['port']
+        
+        try:
+            self.dashboard_thread = start_dashboard_thread(host, port)
+            logger.info(f"Dashboard started at http://{host}:{port}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to start dashboard: {e}")
+            return False
     
     def set_confidence_threshold(self, threshold: float):
         """Set confidence threshold"""
@@ -322,10 +383,14 @@ def main():
                        help='Network interface to sniff on (default: eth0)')
     parser.add_argument('--auto-block', action='store_true',
                        help='Enable automatic IP blocking')
-    parser.add_argument('--threshold', type=float, default=0.85,
-                       help='Confidence threshold for attacks (default: 0.85)')
+    parser.add_argument('--threshold', type=float, default=0.95,
+                       help='Confidence threshold for attacks (default: 0.95)')
     parser.add_argument('--dashboard', action='store_true',
-                       help='Launch Streamlit dashboard')
+                       help='Launch web dashboard')
+    parser.add_argument('--dashboard-only', action='store_true',
+                       help='Launch dashboard only (no packet capture)')
+    parser.add_argument('--dashboard-port', type=int, default=None,
+                       help='Dashboard port (default: 8050 for Dash, 8501 for Streamlit)')
     
     args = parser.parse_args()
     
@@ -339,10 +404,23 @@ def main():
     
     logger.info(f"Starting IDS/IPS System in {args.mode.upper()} mode")
     
-    if args.dashboard:
-        # Launch dashboard
+    # Handle dashboard-only mode
+    if args.dashboard_only:
+        if not DASH_AVAILABLE:
+            logger.error("Dash not available. Install: pip install dash dash-bootstrap-components psutil")
+            sys.exit(1)
+        
+        logger.info("Launching dashboard in standalone mode...")
+        from src.dashboard_dash import run_dashboard
+        port = args.dashboard_port or config.DASHBOARD_CONFIG['port']
+        host = config.DASHBOARD_CONFIG['host']
+        run_dashboard(host=host, port=port, debug=config.DASHBOARD_CONFIG['debug'])
+        
+    elif args.dashboard:
+        # Launch old Streamlit dashboard
         logger.info("Launching Streamlit dashboard...")
         os.system("streamlit run src/dashboard.py")
+        
     else:
         # Start main system
         try:
@@ -353,6 +431,13 @@ def main():
                 system.enable_auto_block(True)
             
             system.set_confidence_threshold(args.threshold)
+            
+            # Start dashboard if Dash is available
+            if DASH_AVAILABLE:
+                port = args.dashboard_port or config.DASHBOARD_CONFIG['port']
+                if system.start_dashboard(port=port):
+                    logger.info(f"Dashboard accessible at http://localhost:{port}")
+                    logger.info("Dashboard will update in real-time as packets are captured")
             
             # Start system
             system.start()

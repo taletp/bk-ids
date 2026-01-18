@@ -19,38 +19,48 @@ for directory in [DATA_DIR, MODEL_DIR, LOG_DIR]:
 
 # ========== SNIFFER CONFIGURATION ==========
 SNIFFER_CONFIG = {
-    'interface': 'eth0',  # Change to 'br0' for bridge, or your interface name
+    'interface': 'eth0',  # Network interface to monitor (use 'ip a' to list)
     'packet_filter': None,  # BPF filter: 'tcp', 'icmp', 'udp', None for all
-    'use_mock': False,  # Set True for testing on Windows without real interface
+    'use_mock': False,  # Set True for testing without real interface
 }
 
 # ========== PREPROCESSING CONFIGURATION ==========
 PREPROCESSING_CONFIG = {
     'window_size': 100,  # Sliding window for packet rate calculation
-    'scaler_type': 'StandardScaler',  # 'StandardScaler' or 'MinMaxScaler'
 }
 
 # ========== MODEL CONFIGURATION ==========
 MODEL_CONFIG = {
-    'architecture': 'mlp',  # 'mlp', 'cnn', or 'lstm'
     'input_dim': 17,  # Number of features
-    'model_path': str(MODEL_DIR / "ids_model_mlp.keras"),
+    'model_path': str(MODEL_DIR / "ids_model_xgboost.joblib"),
     'scaler_path': str(MODEL_DIR / "scaler.joblib"),
-    
-    # Training parameters
-    'epochs': 50,
-    'batch_size': 32,
-    'validation_split': 0.2,
-    'test_split': 0.1,
 }
 
 # ========== DETECTION ENGINE CONFIGURATION ==========
 DETECTOR_CONFIG = {
     'model_path': MODEL_CONFIG['model_path'],
     'scaler_path': MODEL_CONFIG['scaler_path'],
-    'confidence_threshold': 0.85,  # Only flag attacks if probability > 85%
-    'architecture': MODEL_CONFIG['architecture'],
-    'use_mock': False,  # Set True for testing
+    'confidence_threshold': 0.95,  # Only flag attacks if probability > 95%
+    'use_mock': False,  # Set True for testing without real model
+    
+    # IP Whitelist - trusted IPs that should never be flagged as attacks
+    'whitelist': [
+        # '192.168.100.238',  # Host PC
+        # '192.168.100.210',  # Guest VM Linux (Kali)
+        '127.0.0.1',        # Localhost
+        '::1',              # IPv6 localhost
+    ],
+    
+    # Subnet whitelist (CIDR notation)
+    'whitelist_subnets': [
+        # '192.168.100.0/24',  # Local network
+        '10.0.0.0/8',        # Private network
+        '172.16.0.0/12',     # Private network
+        # Uncomment below to whitelist Google/YouTube (reduces false positives for streaming)
+        # '142.250.0.0/15',    # Google/YouTube primary range
+        # '172.217.0.0/16',    # Google services
+        # '216.58.0.0/16',     # YouTube CDN
+    ],
 }
 
 # ========== PREVENTION CONFIGURATION ==========
@@ -62,10 +72,14 @@ PREVENTION_CONFIG = {
 
 # ========== DASHBOARD CONFIGURATION ==========
 DASHBOARD_CONFIG = {
-    'port': 8501,
-    'host': 'localhost',
+    'type': 'dash',  # 'dash' or 'streamlit'
+    'port': 8050,  # Dash default port (Streamlit uses 8501)
+    'host': '0.0.0.0',  # Listen on all interfaces
     'debug': False,
     'theme': 'dark',  # 'light' or 'dark'
+    'refresh_interval': 1000,  # milliseconds
+    'enable_notifications': True,
+    'enable_performance_monitoring': True,
 }
 
 # ========== LOGGING CONFIGURATION ==========
@@ -104,13 +118,38 @@ LOGGING_CONFIG = {
 }
 
 # ========== ATTACK CLASSES ==========
-ATTACK_CLASSES = {
-    0: 'Normal',
-    1: 'Teardrop',
-    2: 'PingOfDeath',
-    3: 'SynFlood',
-    4: 'DNS_Amp'
+# CIC-IDS2018 attack classes (full taxonomy)
+ATTACK_CLASSES_CIC = {
+    0: 'Benign',
+    1: 'FTP-BruteForce',
+    2: 'SSH-Bruteforce',
+    3: 'DoS-GoldenEye',
+    4: 'DoS-Slowloris',
+    5: 'DoS-SlowHTTPTest',
+    6: 'DoS-Hulk',
+    7: 'Heartbleed',
+    8: 'Web-BruteForce',
+    9: 'Web-XSS',
+    10: 'Infiltration',
+    11: 'Botnet',
+    12: 'DDoS-LOIC-HTTP',
+    13: 'DDoS-HOIC',
 }
+
+# CIC-IDS2018 simplified (fewer categories)
+ATTACK_CLASSES_SIMPLIFIED = {
+    0: 'Normal',
+    1: 'BruteForce',
+    2: 'DoS',
+    3: 'DDoS',
+    4: 'Web',
+    5: 'Exploit',
+    6: 'Infiltration',
+    7: 'Botnet',
+}
+
+# Active attack classes (configure which taxonomy to use)
+ATTACK_CLASSES = ATTACK_CLASSES_SIMPLIFIED  # or ATTACK_CLASSES_CIC for full 14 classes
 
 CLASS_TO_INDEX = {v: k for k, v in ATTACK_CLASSES.items()}
 

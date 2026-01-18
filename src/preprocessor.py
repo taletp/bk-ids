@@ -71,6 +71,32 @@ class FeatureExtractor:
                         int(parts[2]) * 256 + int(parts[3]))
         except:
             return 0.0
+
+    @staticmethod
+    def _to_float(val, default: float = 0.0) -> float:
+        """Safely convert a value to float, handling Scapy FlagValue and None."""
+        try:
+            if val is None:
+                return default
+            if isinstance(val, (int, float)):
+                return float(val)
+            # Some Scapy fields may be FlagValue or other objects; try common attributes
+            try:
+                return float(val)
+            except Exception:
+                # Try attribute 'value'
+                if hasattr(val, 'value'):
+                    try:
+                        return float(val.value)
+                    except Exception:
+                        pass
+                # Fallback: string conversion
+                try:
+                    return float(str(val))
+                except Exception:
+                    return default
+        except Exception:
+            return default
     
     def _calculate_packet_rate(self) -> float:
         """Tính packet rate (packets/second) từ sliding window"""
@@ -83,7 +109,7 @@ class FeatureExtractor:
         
         return len(self.packet_timestamps) / time_diff
     
-    def _extract_tcp_flags(self, flags_str: str) -> Dict[str, int]:
+    def _extract_tcp_flags(self, flags_str) -> Dict[str, int]:
         """
         Trích xuất cờ TCP từ string flags
         
@@ -100,8 +126,8 @@ class FeatureExtractor:
             'rst': 0,
         }
         
-        if flags_str:
-            flags_upper = flags_str.upper()
+        if flags_str is not None:
+            flags_upper = str(flags_str).upper()
             flags['syn'] = 1 if 'S' in flags_upper else 0
             flags['ack'] = 1 if 'A' in flags_upper else 0
             flags['fin'] = 1 if 'F' in flags_upper else 0
@@ -132,22 +158,22 @@ class FeatureExtractor:
             features.append(dst_ip_num)
             
             # IP layer features
-            features.append(float(packet_info.get('total_length', 0)))
-            features.append(float(packet_info.get('fragment_offset', 0)))
-            features.append(float(packet_info.get('is_fragment', 0)))
-            features.append(float(packet_info.get('payload_size', 0)))
-            features.append(float(packet_info.get('ttl', 64)))
+            features.append(self._to_float(packet_info.get('total_length', 0)))
+            features.append(self._to_float(packet_info.get('fragment_offset', 0)))
+            features.append(self._to_float(packet_info.get('is_fragment', 0)))
+            features.append(self._to_float(packet_info.get('payload_size', 0)))
+            features.append(self._to_float(packet_info.get('ttl', 64)))
             
             # Port features
-            features.append(float(packet_info.get('src_port', 0)))
-            features.append(float(packet_info.get('dst_port', 0)))
+            features.append(self._to_float(packet_info.get('src_port', 0)))
+            features.append(self._to_float(packet_info.get('dst_port', 0)))
             
             # TCP flags (nếu là TCP packet)
             tcp_flags = self._extract_tcp_flags(packet_info.get('flags', ''))
-            features.append(float(tcp_flags['syn']))
-            features.append(float(tcp_flags['ack']))
-            features.append(float(tcp_flags['fin']))
-            features.append(float(tcp_flags['rst']))
+            features.append(self._to_float(tcp_flags['syn']))
+            features.append(self._to_float(tcp_flags['ack']))
+            features.append(self._to_float(tcp_flags['fin']))
+            features.append(self._to_float(tcp_flags['rst']))
             
             # TCP additional features (từ raw packet nếu có)
             # Placeholder cho window_size và sequence_number
@@ -155,7 +181,7 @@ class FeatureExtractor:
             features.append(0.0)       # default sequence number
             
             # UDP features
-            features.append(float(packet_info.get('payload_size', 0)))
+            features.append(self._to_float(packet_info.get('payload_size', 0)))
             
             # Packet rate
             packet_rate = self._calculate_packet_rate()
