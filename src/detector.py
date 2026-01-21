@@ -16,7 +16,6 @@ except ImportError:
     TF_AVAILABLE = False
 
 from .preprocessor import DataPreprocessor
-from .model_trainer import AttackDetectionModel
 
 try:
     from .feature_adapter import FeatureAdapter
