@@ -126,7 +126,6 @@ class IDSIPSSystem:
                         model_path=config.DETECTOR_CONFIG['model_path'],
                         scaler_path=config.DETECTOR_CONFIG['scaler_path'],
                         confidence_threshold=config.DETECTOR_CONFIG['confidence_threshold'],
-                        architecture=config.DETECTOR_CONFIG['architecture'],
                         metadata_path=str(metadata_path) if metadata_path.exists() else None,
                         whitelist=config.DETECTOR_CONFIG.get('whitelist', []),
                         whitelist_subnets=config.DETECTOR_CONFIG.get('whitelist_subnets', [])

@@ -46,11 +46,10 @@ class DetectionEngine:
         4: 'DNS_Amp'
     }
     
-    def __init__(self, 
+    def __init__(self,
                  model_path: str,
                  scaler_path: str,
                  confidence_threshold: float = 0.85,
-                 architecture: str = 'mlp',
                  metadata_path: Optional[str] = None,
                  whitelist: Optional[list] = None,
                  whitelist_subnets: Optional[list] = None):
@@ -61,7 +60,6 @@ class DetectionEngine:
             model_path: Đường dẫn tới file mô hình (.h5 hoặc .keras)
             scaler_path: Đường dẫn tới file scaler (.pkl hoặc .joblib)
             confidence_threshold: Ngưỡng confidence để báo tấn công (0.0-1.0)
-            architecture: Loại mô hình ('mlp', 'cnn', 'lstm')
             metadata_path: Path to model_metadata.json (for CIC-IDS2018 models)
             whitelist: List of trusted IP addresses
             whitelist_subnets: List of trusted subnets in CIDR notation
@@ -69,7 +67,6 @@ class DetectionEngine:
         self.model_path = model_path
         self.scaler_path = scaler_path
         self.confidence_threshold = confidence_threshold
-        self.architecture = architecture
         self.metadata_path = metadata_path
         self.whitelist = set(whitelist or [])
         self.whitelist_subnets = whitelist_subnets or []
@@ -314,11 +311,8 @@ class DetectionEngine:
                     'error': 'Feature extraction failed'
                 }
             
-            # Reshape cho mô hình
-            if self.architecture in ['cnn', 'lstm']:
-                X = processed_features.reshape(1, len(processed_features), 1)
-            else:
-                X = processed_features.reshape(1, -1)
+            # Reshape for model input
+            X = processed_features.reshape(1, -1)
             
             # Predict based on model type
             if self.model_type == 'sklearn':
@@ -445,7 +439,6 @@ class DetectionEngine:
             return {
                 'model_path': self.model_path,
                 'scaler_path': self.scaler_path,
-                'architecture': self.architecture,
                 'confidence_threshold': self.confidence_threshold,
                 'input_shape': self.model.input_shape,
                 'total_params': self.model.count_params()
