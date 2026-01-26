@@ -4,6 +4,7 @@ Configuration file for IDS/IPS System
 
 import os
 from pathlib import Path
+from src.platform_utils import get_default_interface
 
 # Project paths
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -19,7 +20,7 @@ for directory in [DATA_DIR, MODEL_DIR, LOG_DIR]:
 
 # ========== SNIFFER CONFIGURATION ==========
 SNIFFER_CONFIG = {
-    'interface': 'eth0',  # Network interface to monitor (use 'ip a' to list)
+    'interface': get_default_interface() or 'eth0',  # Auto-detect or fallback to eth0
     'packet_filter': None,  # BPF filter: 'tcp', 'icmp', 'udp', None for all
     'use_mock': False,  # Set True for testing without real interface
 }
@@ -152,6 +153,17 @@ ATTACK_CLASSES_SIMPLIFIED = {
 ATTACK_CLASSES = ATTACK_CLASSES_SIMPLIFIED  # or ATTACK_CLASSES_CIC for full 14 classes
 
 CLASS_TO_INDEX = {v: k for k, v in ATTACK_CLASSES.items()}
+
+# Log auto-detected interface
+detected_iface = SNIFFER_CONFIG['interface']
+if detected_iface and detected_iface != 'eth0':
+    print(f"✓ Auto-detected network interface: {detected_iface}")
+else:
+    fallback_msg = "using fallback interface: eth0"
+    if get_default_interface():
+        print(f"⚠ Network interface set to eth0 (auto-detection: {get_default_interface()})")
+    else:
+        print(f"⚠ Using fallback interface: eth0 (auto-detection failed or unavailable)")
 
 # ========== FEATURE NAMES ==========
 FEATURE_NAMES = [

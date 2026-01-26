@@ -378,8 +378,8 @@ def main():
     parser = argparse.ArgumentParser(description='IDS/IPS System')
     parser.add_argument('--mode', choices=['live', 'demo', 'mock'], default='mock',
                        help='Operation mode (default: mock)')
-    parser.add_argument('--interface', default='eth0',
-                       help='Network interface to sniff on (default: eth0)')
+    parser.add_argument('--interface', default=config.SNIFFER_CONFIG['interface'],
+                       help='Network interface to sniff on (default: auto-detect or eth0)')
     parser.add_argument('--auto-block', action='store_true',
                        help='Enable automatic IP blocking')
     parser.add_argument('--threshold', type=float, default=0.95,
