@@ -1,13 +1,14 @@
 """
 Module Prevention: Tự động chặn IP tấn công
-Hỗ trợ Linux (iptables) và Windows (netsh/Windows Firewall) fallback
+Hỗ trợ Linux (iptables), macOS (mock), và Windows (netsh/Windows Firewall) fallback
 """
 
 import logging
-import platform
 import subprocess
 from typing import Dict, List, Set, Optional
 from datetime import datetime, timedelta
+
+from src.platform_utils import get_os_type, command_exists
 
 logger = logging.getLogger(__name__)
 
@@ -31,26 +32,31 @@ class FirewallManager:
         """
         self.auto_block = auto_block
         self.block_duration = block_duration
-        self.os_type = platform.system()
+        self.os_type = get_os_type()
         
         # Track blocked IPs
         self.blocked_ips = {}  # {ip: blocked_time}
         
-        # Check if iptables is available on Linux
+        # Check for macOS and use mock implementation
+        self.use_mock = False
         self.iptables_available = False
-        if self.os_type == 'Linux':
+        
+        if self.os_type == 'darwin':
+            logger.warning("Using mock firewall on macOS (pf/pfctl not implemented)")
+            self.use_mock = True
+        elif self.os_type == 'linux':
             self.iptables_available = self._check_iptables()
         
         logger.info(f"FirewallManager initialized on {self.os_type}")
         logger.info(f"Auto-block: {auto_block}, Block duration: {block_duration}s")
         logger.info(f"iptables available: {self.iptables_available}")
+        if self.use_mock:
+            logger.info("Using mock firewall manager")
     
     def _check_iptables(self) -> bool:
         """Kiểm tra xem iptables có sẵn không"""
         try:
-            result = subprocess.run(['which', 'iptables'], 
-                                  capture_output=True, text=True, timeout=2)
-            return result.returncode == 0
+            return command_exists('iptables')
         except Exception as e:
             logger.warning(f"Could not check iptables: {str(e)}")
             return False
@@ -76,7 +82,10 @@ class FirewallManager:
             return False
         
         try:
-            if self.os_type == 'Linux' and self.iptables_available:
+            if self.use_mock:
+                # Use mock implementation for macOS
+                return self._block_ip_mock(ip_address, reason)
+            elif self.os_type == 'linux' and self.iptables_available:
                 return self._block_ip_iptables(ip_address, reason)
             else:
                 return self._block_ip_netsh(ip_address, reason)
@@ -161,7 +170,10 @@ class FirewallManager:
             return False
         
         try:
-            if self.os_type == 'Linux' and self.iptables_available:
+            if self.use_mock:
+                # Use mock implementation for macOS
+                return self._unblock_ip_mock(ip_address)
+            elif self.os_type == 'linux' and self.iptables_available:
                 return self._unblock_ip_iptables(ip_address)
             else:
                 return self._unblock_ip_netsh(ip_address)
@@ -206,6 +218,26 @@ class FirewallManager:
                 return False
         except Exception as e:
             logger.error(f"Error in _unblock_ip_netsh: {str(e)}")
+            return False
+    
+    def _block_ip_mock(self, ip_address: str, reason: str) -> bool:
+        """Mock block IP (for macOS)"""
+        try:
+            self.blocked_ips[ip_address] = datetime.now()
+            logger.info(f"[MOCK] Blocked IP {ip_address}. Reason: {reason}")
+            return True
+        except Exception as e:
+            logger.error(f"Error with mock block: {str(e)}")
+            return False
+    
+    def _unblock_ip_mock(self, ip_address: str) -> bool:
+        """Mock unblock IP (for macOS)"""
+        try:
+            del self.blocked_ips[ip_address]
+            logger.info(f"[MOCK] Unblocked IP {ip_address}")
+            return True
+        except Exception as e:
+            logger.error(f"Error with mock unblock: {str(e)}")
             return False
     
     def check_expiry(self):
@@ -279,3 +311,26 @@ class MockFirewallManager:
     
     def clear_all_blocks(self):
         self.blocked_ips.clear()
+
+
+def get_firewall_manager(auto_block: bool = False, block_duration: int = 3600) -> FirewallManager:
+    """
+    Factory function to instantiate the appropriate FirewallManager.
+    
+    On macOS, returns a MockFirewallManager.
+    On Linux/Windows, returns a full FirewallManager.
+    
+    Args:
+        auto_block: Enable automatic IP blocking
+        block_duration: Duration in seconds to block IPs
+    
+    Returns:
+        FirewallManager instance (or MockFirewallManager on macOS)
+    """
+    os_type = get_os_type()
+    
+    if os_type == 'darwin':
+        logger.info("macOS detected, using MockFirewallManager")
+        return MockFirewallManager(auto_block, block_duration)
+    
+    return FirewallManager(auto_block, block_duration)
