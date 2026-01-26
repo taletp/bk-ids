@@ -1,7 +1,18 @@
 import logging
 from datetime import datetime
 
+try:
+    import colorama
+    colorama.init(autoreset=True)
+except ImportError:
+    pass
+    # Colorama not available, ANSI codes may not work on Windows
+
+# Check if colorama is available
+colorama_available = True if 'colorama' in dir() else False
+
 # Color map inspired by user's snippet
+# colorama.init() enables these ANSI codes on Windows
 COLORS = {
     "INFO": "\033[94m",    # Blue
     "CHAT": "\033[92m",    # Green
@@ -25,7 +36,7 @@ class ColoredFormatter(logging.Formatter):
         return f"{color}[{timestamp}][{levelname}] {msg}{COLORS['ENDC']}"
 
 
-def setup_colored_logger(logger_name: str = None):
+def setup_colored_logger(logger_name: str | None = None):
     """Attach a colored console handler to the root logger or a named logger.
 
     If a console handler already exists, its formatter is replaced with the colored formatter.
