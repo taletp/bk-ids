@@ -66,6 +66,109 @@ python main.py --dashboard-only
 
 ---
 
+## 🖥️ Platform-Specific Setup
+
+The system now supports **Linux, macOS, and Windows** with automatic platform detection.
+
+### Automated Setup (Recommended)
+
+Use the cross-platform setup script to check dependencies and install requirements:
+
+```bash
+# Check dependencies and install requirements
+python setup_env.py
+
+# Or create virtual environment automatically
+python setup_env.py --venv
+
+# Show help and options
+python setup_env.py --help
+```
+
+The script automatically:
+- Checks Python version (requires >=3.8)
+- Detects your operating system
+- Verifies OS-specific dependencies (libpcap/Npcap)
+- Installs Python requirements
+- Optionally creates and configures virtual environment
+
+### Linux
+
+**Requirements:**
+- `libpcap-dev` package for packet capture
+- `sudo` or `pcap` group membership for live capture
+
+**Installation:**
+```bash
+# Install libpcap development headers
+sudo apt-get update
+sudo apt-get install libpcap-dev
+
+# Run setup script
+python setup_env.py
+```
+
+**Network Interface:**
+- Auto-detects: `eth0`, `ens33`, `wlan0`, etc.
+- Override with: `--interface <name>`
+
+### macOS
+
+**Requirements:**
+- `libpcap` (pre-installed on macOS 10.6+)
+- `sudo` for live packet capture
+
+**Installation:**
+```bash
+# Run setup script (libpcap check automatic)
+python setup_env.py
+```
+
+**⚠️ Important - Firewall Limitation:**
+- **Mock firewall mode only** - no real IP blocking on macOS
+- Detection works normally, but `block_ip()` is simulated
+- No `pf`/`pfctl` integration implemented
+- For production use, deploy on Linux or Windows
+
+**Network Interface:**
+- Auto-detects: `en0`, `en1` (primary Ethernet/Wi-Fi)
+- Override with: `--interface <name>`
+
+### Windows
+
+**Requirements:**
+- **Npcap** (required for packet capture with Scapy)
+- Administrator privileges for live capture and firewall operations
+
+**Installation:**
+1. **Install Npcap first:**
+   - Download from: https://nmap.org/npcap/
+   - During installation, check "Install Npcap in WinPcap API-compatible Mode"
+   - Reboot after installation
+
+2. **Run setup script:**
+   ```bash
+   python setup_env.py
+   ```
+   The script will detect Npcap and guide you if missing.
+
+**Run as Administrator:**
+```bash
+# Right-click Command Prompt → "Run as Administrator"
+python main.py --mode live --interface "Ethernet"
+```
+
+**Network Interface:**
+- Auto-detects: `"Ethernet"`, `"Wi-Fi"`, `"VMware Network Adapter VMnet1"`, etc.
+- **Note:** Windows interface names may contain spaces - use quotes
+- Override with: `--interface "Your Interface Name"`
+
+**Console Colors:**
+- Terminal colors enabled via `colorama` (auto-installed)
+- Works in cmd.exe, PowerShell, and Windows Terminal
+
+---
+
 ## 📁 Project Structure
 
 ```
@@ -226,18 +329,32 @@ The system includes streaming traffic detection heuristics. To further reduce fa
    ]
    ```
 
-### Permission Errors
+---
 
+### Linux Issues
+
+**Permission Denied Errors:**
 ```bash
-# Live capture requires sudo
+# Option 1: Run with sudo
 sudo venv/bin/python main.py --mode live --interface eth0
 
-# Or add user to pcap group
+# Option 2: Add user to pcap group (no sudo needed after reboot)
 sudo usermod -a -G pcap $USER
+# Then logout and login again
+
+# Option 3: Set capabilities on Python binary
+sudo setcap cap_net_raw,cap_net_admin=eip /usr/bin/python3.x
 ```
 
-### No Packets Captured
+**libpcap-dev Missing:**
+```bash
+# Error: "fatal error: pcap.h: No such file or directory"
+sudo apt-get update
+sudo apt-get install libpcap-dev
+pip install --force-reinstall scapy
+```
 
+**No Packets Captured:**
 ```bash
 # Check interface name
 ip a
@@ -245,8 +362,128 @@ ip a
 # Verify interface is up
 sudo ip link set eth0 up
 
-# Check for other sniffers
+# Check for conflicting sniffers
 sudo lsof -i | grep tcpdump
+sudo killall tcpdump  # If needed
+```
+
+**Interface Auto-Detection Issues:**
+```bash
+# Test interface detection
+python -c "from src.platform_utils import get_default_interface; print(get_default_interface())"
+
+# Manually specify interface
+python main.py --mode live --interface ens33
+```
+
+---
+
+### macOS Issues
+
+**Mock Firewall Limitation:**
+```
+⚠️ IMPORTANT: macOS uses MOCK FIREWALL MODE only
+```
+- **What this means:** Attack detection works normally, but IP blocking is SIMULATED
+- **Why:** No `pf`/`pfctl` firewall integration implemented
+- **Detection:** Attacks are detected and logged correctly
+- **Blocking:** `block_ip()` calls log the action but don't modify firewall rules
+- **Production use:** Deploy on Linux or Windows for real IP blocking
+
+**Permission Denied:**
+```bash
+# Live capture requires sudo
+sudo python main.py --mode live --interface en0
+
+# Check interface name
+ifconfig
+# Common: en0 (Ethernet), en1 (Wi-Fi)
+```
+
+**libpcap Already Installed:**
+- macOS 10.6+ includes libpcap by default
+- No additional installation needed
+- If issues persist, install Xcode Command Line Tools:
+  ```bash
+  xcode-select --install
+  ```
+
+**Interface Auto-Detection:**
+```bash
+# Test detection
+python -c "from src.platform_utils import get_default_interface; print(get_default_interface())"
+
+# Expected output: "en0", "en1", etc.
+# Manually override if needed
+python main.py --mode live --interface en1
+```
+
+---
+
+### Windows Issues
+
+**Npcap Not Installed:**
+```
+❌ Error: "Npcap is not installed..."
+```
+**Solution:**
+1. Download Npcap from: https://nmap.org/npcap/
+2. Run installer as Administrator
+3. **Important:** Check "Install Npcap in WinPcap API-compatible Mode"
+4. Reboot after installation
+5. Verify installation:
+   ```bash
+   # Check if Npcap service is running
+   sc query npcap
+   
+   # Or check installation directory
+   dir C:\Windows\System32\Npcap
+   ```
+
+**Not Running as Administrator:**
+```
+❌ Error: "Access is denied" or "Firewall modification failed"
+```
+**Solution:**
+- Right-click Command Prompt or PowerShell
+- Select "Run as Administrator"
+- Then run the IDS:
+  ```bash
+  python main.py --mode live --interface "Ethernet"
+  ```
+
+**Interface Name with Spaces:**
+```bash
+# Windows interface names often contain spaces
+# ✓ CORRECT - Use quotes:
+python main.py --mode live --interface "VMware Network Adapter VMnet1"
+python main.py --mode live --interface "Wi-Fi"
+
+# ❌ WRONG - Without quotes (will fail):
+python main.py --mode live --interface VMware Network Adapter VMnet1
+```
+
+**Auto-Detection:**
+```bash
+# Test interface detection
+python -c "from src.platform_utils import get_default_interface; print(get_default_interface())"
+
+# Expected output: "Ethernet", "Wi-Fi", "VMware Network Adapter VMnet1", etc.
+```
+
+**Console Colors Not Working:**
+- Install colorama: `pip install colorama` (should be in requirements.txt)
+- Use Windows Terminal (recommended) instead of old cmd.exe
+- Colors work in: Windows Terminal, PowerShell, VSCode terminal
+
+**Firewall Operations Failing:**
+```bash
+# Ensure running as Administrator
+# Check Windows Firewall service is running
+sc query mpssvc
+
+# If service stopped, start it:
+sc start mpssvc
 ```
 
 ---
