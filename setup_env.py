@@ -263,7 +263,10 @@ def install_requirements(venv_path=None):
             # Use pip from virtual environment
             os_type = get_os_type()
             if os_type == 'windows':
-                pip_executable = venv_path / 'Scripts' / 'pip'
+                # On Windows, pip executable is 'pip.exe' or 'pip' (check both)
+                pip_executable = venv_path / 'Scripts' / 'pip.exe'
+                if not pip_executable.exists():
+                    pip_executable = venv_path / 'Scripts' / 'pip'
             else:
                 pip_executable = venv_path / 'bin' / 'pip'
             
