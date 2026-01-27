@@ -14,8 +14,14 @@ import logging
 import os
 import subprocess
 import sys
-import winreg
+# Skip winreg import - handled later
 from pathlib import Path
+
+# Import winreg only on Windows
+try:
+    import winreg
+except ImportError:
+    winreg = None
 
 # Setup logging
 logging.basicConfig(
@@ -189,14 +195,15 @@ def check_npcap_windows():
             print_success(f"Npcap found at: {path}")
             return True
     
-    # Check registry (Windows)
-    try:
-        reg_path = r"SOFTWARE\Npcap"
-        winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path)
-        print_success("Npcap registry entry found")
-        return True
-    except WindowsError:
-        pass
+    # Check registry (Windows only)
+    if winreg is not None:
+        try:
+            reg_path = r"SOFTWARE\Npcap"
+            winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path)
+            print_success("Npcap registry entry found")
+            return True
+        except WindowsError:
+            pass
     
     # Npcap not found
     print_warning("Npcap not found on this system")
