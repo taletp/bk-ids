@@ -25,44 +25,41 @@ A production-ready **Deep Learning-based IDS/IPS** system with real-time monitor
 
 ## 🚀 Quick Start
 
-### 1. Setup Environment
+### Recommended: Use Automated Setup
+
+```bash
+# Navigate to project directory
+cd /path-to-folder/bk-ids
+
+# Run cross-platform setup script (creates venv + installs dependencies)
+python setup_env.py --venv
+
+# Activate virtual environment
+# Linux/macOS:
+source venv/bin/activate
+# Windows:
+.\venv\Scripts\activate
+
+# For detailed platform-specific instructions, see section below ⬇️
+```
+
+**That's it!** The setup script handles everything automatically.  
+Installation takes 10-30+ minutes for ML libraries - you'll see real-time progress.
+
+---
+
+### Alternative: Manual Setup
+
+If you prefer manual installation:
 
 ```bash
 cd /path-to-folder/bk-ids
 python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+source venv/bin/activate  # Windows: .\venv\Scripts\activate
+pip install -r requirements.txt  # Takes 10-30+ minutes
 ```
 
-### 2. Install Dashboard Dependencies
-
-```bash
-./setup_dashboard.sh
-# Or manually:
-pip install dash dash-bootstrap-components psutil
-```
-
-### 3. Test Installation
-
-```bash
-python test_dashboard.py
-```
-
-### 4. Run IDS with Dashboard
-
-```bash
-# Live capture mode (requires sudo)
-sudo venv/bin/python main.py --mode live --interface eth0
-
-# Dashboard automatically starts at http://localhost:8050
-# Open in browser to view real-time monitoring
-```
-
-### 5. Dashboard Only (Testing)
-
-```bash
-python main.py --dashboard-only
-```
+**Note:** Manual setup requires you to install OS-specific dependencies first (see Platform-Specific Setup below).
 
 ---
 
@@ -89,8 +86,21 @@ The script automatically:
 - Checks Python version (requires >=3.8)
 - Detects your operating system
 - Verifies OS-specific dependencies (libpcap/Npcap)
-- Installs Python requirements
+- Installs Python requirements with **real-time progress**
 - Optionally creates and configures virtual environment
+
+**⏱️ Installation Time:**
+- **Expected duration:** 10-30+ minutes (ML libraries like TensorFlow are large, ~500MB)
+- **Shows progress:** Download %, extraction %, package names in real-time
+- **Timeout:** 2 hours for slow internet connections
+- **What you'll see:**
+  ```
+  Collecting tensorflow>=2.12.0
+    Downloading tensorflow-2.20.0-cp311... (508.7 MB)
+       |████████████████████████        | 325 MB 3.5 MB/s
+  Installing collected packages: tensorflow, scikit-learn, xgboost...
+  ✓ Dependencies installed successfully
+  ```
 
 ### Linux
 
@@ -199,7 +209,73 @@ bk-ids/
 
 ---
 
-## 🎮 Usage Examples
+## 🎮 Running the System
+
+### Test Mode (No Admin Required)
+
+```bash
+# Mock mode - simulates packet capture (great for testing)
+python main.py --mode mock
+
+# Demo mode - uses pre-recorded attack samples
+python main.py --mode demo
+
+# Dashboard will automatically start at http://localhost:8050
+```
+
+### Live Capture Mode
+
+**Linux:**
+```bash
+# Requires sudo for packet capture
+sudo venv/bin/python main.py --mode live --interface eth0
+
+# Optional: Add user to pcap group to avoid sudo
+sudo usermod -a -G pcap $USER
+# (logout/login required after group change)
+```
+
+**macOS:**
+```bash
+# Requires sudo for packet capture
+# Note: Uses MOCK FIREWALL (no real IP blocking)
+sudo python main.py --mode live --interface en0
+```
+
+**Windows:**
+```bash
+# Run Command Prompt or PowerShell as Administrator
+# Requires Npcap installed (see Platform-Specific Setup)
+python main.py --mode live --interface "Ethernet"
+# Note: Interface names with spaces need quotes
+```
+
+### Advanced Options
+
+```bash
+# Custom confidence threshold (default: 0.95)
+python main.py --mode live --interface eth0 --threshold 0.98
+
+# Enable automatic IP blocking (requires admin/sudo)
+python main.py --mode live --interface eth0 --auto-block
+
+# Custom dashboard port
+python main.py --mode live --interface eth0 --dashboard-port 8888
+
+# Skip dashboard (headless mode)
+python main.py --mode live --interface eth0 --no-dashboard
+```
+
+### Access Dashboard
+
+Once running, open your browser:
+- **URL:** http://localhost:8050
+- **Features:** Real-time metrics, attack alerts, performance monitoring
+- **Compatible:** Chrome, Firefox, Edge, Safari
+
+---
+
+## 🎮 Usage Examples (Legacy)
 
 ### Live Capture with Custom Threshold
 
@@ -421,6 +497,24 @@ python main.py --mode live --interface en1
 ---
 
 ### Windows Issues
+
+**setup_env.py - ModuleNotFoundError: No module named 'joblib'**
+```
+❌ Failed to import platform_utils: No module named 'joblib'
+```
+**This is FIXED in the latest version.** If you see this error:
+1. Update to latest version: `git pull` (if using git)
+2. Or download the latest `setup_env.py` from the repository
+3. The script now loads dependencies correctly before installation
+
+**Setup Taking Too Long / Appears Frozen:**
+- **Expected:** 10-30+ minutes for ML library installation (TensorFlow is ~500MB)
+- **Normal behavior:** You'll see real-time progress like:
+  ```
+  Collecting tensorflow>=2.12.0
+    Downloading tensorflow-2.20.0... |████████░░░░| 325 MB 3.5 MB/s
+  ```
+- **If truly frozen:** Press `Ctrl+C` and run `python setup_env.py --skip-checks` to retry
 
 **Npcap Not Installed:**
 ```
