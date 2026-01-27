@@ -232,11 +232,17 @@ def check_libpcap(skip_checks=False):
         return True
 
 
-def install_requirements():
+def install_requirements(venv_path=None):
     """
     Install Python requirements from requirements.txt.
     
+    If venv_path provided, installs into that virtual environment.
+    Otherwise installs globally.
+    
     Shows progress during installation for long-running ML library installs.
+    
+    Args:
+        venv_path: Path to virtual environment (optional)
     
     Returns:
         bool: True if successful, False otherwise
@@ -252,11 +258,34 @@ def install_requirements():
     print_info("")
     
     try:
+        # Determine which pip to use
+        if venv_path:
+            # Use pip from virtual environment
+            os_type = get_os_type()
+            if os_type == 'windows':
+                pip_executable = venv_path / 'Scripts' / 'pip'
+            else:
+                pip_executable = venv_path / 'bin' / 'pip'
+            
+            if not pip_executable.exists():
+                print_error(f"pip not found in virtual environment: {pip_executable}")
+                return False
+        else:
+            # Use global pip
+            pip_executable = sys.executable.replace('python', 'pip')
+            # Fallback: use python -m pip
+            pip_executable = sys.executable
+        
+        # Build command
+        if venv_path:
+            cmd = [str(pip_executable), 'install', '-r', str(requirements_file)]
+        else:
+            cmd = [sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)]
+        
         # Use '-v' for verbose output so users see progress during long ML library installs
         # Increased timeout to 2 hours (7200s) to handle slow internet/machines
-        # Remove '-q' to show real-time installation progress
         subprocess.run(
-            [sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)],
+            cmd,
             check=True,
             timeout=7200  # 2 hours - ML libraries can take a long time
         )
@@ -269,7 +298,10 @@ def install_requirements():
     except subprocess.TimeoutExpired:
         print_error("Installation timed out (>2 hours)")
         print_warning("If your internet is very slow, you can increase timeout or install manually:")
-        print_info(f"  pip install -r {requirements_file}")
+        if venv_path:
+            print_info(f"  {venv_path / ('Scripts' if get_os_type() == 'windows' else 'bin') / 'pip'} install -r {requirements_file}")
+        else:
+            print_info(f"  pip install -r {requirements_file}")
         return False
     except Exception as e:
         print_error(f"Unexpected error installing dependencies: {e}")
@@ -322,8 +354,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python setup_env.py                # Basic setup
-  python setup_env.py --venv         # Create virtual environment
+  python setup_env.py                # Basic setup (global pip)
+  python setup_env.py --venv         # Create venv + install into venv
   python setup_env.py --skip-checks  # Skip OS-specific checks
         """
     )
@@ -331,7 +363,7 @@ Examples:
     parser.add_argument(
         '--venv',
         action='store_true',
-        help='Create virtual environment (./venv)'
+        help='Create virtual environment (./venv) and install into it'
     )
     parser.add_argument(
         '--skip-checks',
@@ -352,9 +384,12 @@ Examples:
     os_type = get_os_type()
     print_success(f"Detected OS: {os_type.capitalize()}")
     
+    venv_path = None
+    
     # Step 3: Create venv if requested
     if args.venv:
         print()
+        venv_path = Path(__file__).parent / 'venv'
         if not create_venv():
             sys.exit(1)
     
@@ -362,9 +397,9 @@ Examples:
     print()
     check_libpcap(skip_checks=args.skip_checks)
     
-    # Step 5: Install requirements
+    # Step 5: Install requirements (into venv if created, else globally)
     print()
-    if not install_requirements():
+    if not install_requirements(venv_path=venv_path):
         sys.exit(1)
     
     # Success
@@ -372,7 +407,6 @@ Examples:
     
     if args.venv:
         print_info("Next steps:")
-        os_type = get_os_type()
         if os_type == 'windows':
             print("  1. Activate venv: .\\venv\\Scripts\\activate")
         else:
