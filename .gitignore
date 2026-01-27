@@ -110,3 +110,7 @@ models/
 *.h5
 *.ckpt
 .env
+
+
+# sisyphus
+.sisyphus/
