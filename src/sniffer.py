@@ -199,6 +199,15 @@ class MockPacketSniffer:
     
     def get_stats(self) -> dict:
         return {'total_packets': self.packet_count, 'protocol_stats': dict(self.packet_stats)}
+    
+    def start_sniffing(self, callback, packet_count=0, timeout=None):
+        """Mock implementation of packet sniffing - does nothing (mock mode)"""
+        self.is_running = True
+        logger.info(f"MockPacketSniffer: Starting (mock) packet capture on {self.interface}")
+        # In mock mode, we don't actually capture packets
+        # This prevents errors when main.py tries to start sniffing
+        self.is_running = False
+        logger.info("MockPacketSniffer: (mock) packet capture completed")
 
 
 # Factory function

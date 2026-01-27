@@ -618,3 +618,13 @@ class NoopDetectionEngine:
 
     def update_threshold(self, new_threshold: float):
         self.confidence_threshold = new_threshold
+
+    
+    def log_metrics_summary(self):
+        """Log a summary of metrics (noop mode - always normal)"""
+        logger.info("=" * 60)
+        logger.info("NoopDetectionEngine Metrics Summary (Safe Mode)")
+        logger.info("=" * 60)
+        logger.info("This engine always classifies packets as 'Normal'")
+        logger.info("Use in production when model cannot be loaded")
+        logger.info("No attacks will be reported (safe fallback mode)")
