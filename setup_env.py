@@ -224,6 +224,8 @@ def install_requirements():
     """
     Install Python requirements from requirements.txt.
     
+    Shows progress during installation for long-running ML library installs.
+    
     Returns:
         bool: True if successful, False otherwise
     """
@@ -234,12 +236,17 @@ def install_requirements():
         return False
     
     print_info("Installing Python dependencies from requirements.txt...")
+    print_info("This may take 10-30+ minutes (TensorFlow, PyTorch, etc. are large)...")
+    print_info("")
     
     try:
+        # Use '-v' for verbose output so users see progress during long ML library installs
+        # Increased timeout to 2 hours (7200s) to handle slow internet/machines
+        # Remove '-q' to show real-time installation progress
         subprocess.run(
-            [sys.executable, '-m', 'pip', 'install', '-q', '-r', str(requirements_file)],
+            [sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)],
             check=True,
-            timeout=300
+            timeout=7200  # 2 hours - ML libraries can take a long time
         )
         print_success("Dependencies installed successfully")
         return True
@@ -248,7 +255,9 @@ def install_requirements():
         print_error(f"Failed to install dependencies: {e}")
         return False
     except subprocess.TimeoutExpired:
-        print_error("Installation timed out (>5 minutes)")
+        print_error("Installation timed out (>2 hours)")
+        print_warning("If your internet is very slow, you can increase timeout or install manually:")
+        print_info(f"  pip install -r {requirements_file}")
         return False
     except Exception as e:
         print_error(f"Unexpected error installing dependencies: {e}")
