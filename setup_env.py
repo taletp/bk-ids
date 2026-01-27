@@ -24,12 +24,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
+# Import platform_utils directly (bypass src/__init__.py to avoid loading heavy dependencies)
+# This is necessary because setup_env runs BEFORE dependencies are installed
 try:
-    from src.platform_utils import get_os_type, is_admin, command_exists
-except ImportError as e:
+    # Add src directory to path
+    src_path = Path(__file__).parent / 'src'
+    sys.path.insert(0, str(src_path))
+    
+    # Import platform_utils module directly
+    import importlib.util
+    platform_utils_path = src_path / 'platform_utils.py'
+    spec = importlib.util.spec_from_file_location("platform_utils", platform_utils_path)
+    platform_utils = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(platform_utils)
+    
+    get_os_type = platform_utils.get_os_type
+    is_admin = platform_utils.is_admin
+    command_exists = platform_utils.command_exists
+except Exception as e:
     logger.error(f"❌ Failed to import platform_utils: {e}")
     logger.error("Make sure src/platform_utils.py exists in the project root.")
     sys.exit(1)
